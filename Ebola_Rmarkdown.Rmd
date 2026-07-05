@@ -1,0 +1,656 @@
+---
+title: "Factors Associated with Laboratory
+Sierra-Leone, West Africa:"
+author: "Ojiambo Ivan"
+date: "`r Sys.Date()`"
+output:
+    prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+    toc: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading Libraries----
+
+```{r include=FALSE}
+library(tidyverse) 
+library(lme4) 
+library(sjPlot) 
+library(ggplot2) 
+library(lmerTest) 
+library(nlme) 
+library(broom.mixed) 
+library(performance) 
+library(see) 
+library(ineq) 
+library(ggeffects) 
+library(brms) 
+library(sf) 
+library(emmeans) 
+library(readxl) 
+library(dplyr) 
+library(naniar) 
+library(VIM) 
+library(visdat)
+library(stringr)
+library(broom) 
+library(pscl) 
+library(here)
+library(janitor)
+library(ResourceSelection)
+```
+
+`Loading study Ebola data---
+
+```{r echo=FALSE, message=FALSE}
+ebola<-read_csv(here("data/ebola_sierra_leone.csv"))
+
+View(ebola)
+
+```
+
+**CLEANING EBOLA_DATA----**
+
+clean column 
+
+```{r echo=FALSE, message=FALSE}
+
+ebola<-clean_names(ebola) 
+names(ebola) 
+```
+
+
+**Checking of missing data--**
+
+```{r echo=FALSE, message=FALSE}
+colSums(is.na(ebola)) 
+colMeans(is.na(ebola))*100 
+vis_miss(ebola)
+
+```
+
+**checking Duplicates---**
+
+```{r echo=FALSE}
+sum(duplicated(ebola$id)) 
+```
+
+**cleaning_age----**
+
+```{r echo=FALSE}
+summary(ebola$age)
+
+ebola$age<-as.numeric(ebola$age) 
+ebola<-ebola %>%  
+filter(age>=0 & age<=100)
+
+ebola$age[is.na(ebola$age)]<-median(ebola$age,na.rm = TRUE) 
+summary(ebola$age) 
+hist(ebola$age)
+
+```
+
+**cleaning_sex---** 
+
+```{r echo=FALSE}
+ebola$sex<-tolower(ebola$sex) 
+ebola$sex<-recode(ebola$sex, 
+"m"="male", 
+"f"="female") 
+ebola$sex<-factor(ebola$sex)
+ebola$sex
+```
+
+
+**cleaning_status----** 
+
+```{r echo=FALSE}
+unique(ebola$status) 
+ebola$status<-tolower(ebola$status) 
+ebola$status<-factor(ebola$status, 
+levels = c("suspected","confirmed")) 
+```
+
+**cleaning_districts----**
+
+```{r echo=FALSE}
+unique(ebola$district) 
+ebola$district<-tolower(ebola$district) 
+ebola$district<-trimws(ebola$district) 
+ebola$district<-factor(ebola$district) 
+```
+
+**dates_cleaning---**
+
+*date of onset*
+
+```{r echo=FALSE}
+library(lubridate) 
+head(ebola$date_of_onset) 
+ebola$date_of_onset<-ymd(ebola$date_of_onset)
+```
+
+*date of the sample*
+
+```{r echo=FALSE}
+head(ebola$date_of_sample) 
+ebola$date_of_sample<-ymd(ebola$date_of_sample) 
+```
+
+
+**sample data before onset data---**
+
+```{r echo=FALSE}
+ebola %>%  
+  filter(date_of_sample<date_of_onset) 
+ebola<-ebola %>%  
+  filter(date_of_sample>=date_of_onset) 
+```
+ 
+**delay variables---**
+
+```{r echo=FALSE}
+ebola$delay_days<-as.numeric( 
+  ebola$date_of_sample - ebola$date_of_onset 
+  )
+ebola$delay_days<-as.data.frame(ebola$delay_days)
+reactable::reactable(ebola$delay_days)
+
+summary(ebola$delay_days) 
+```
+
+
+**Creating Age_group---**
+
+```{r echo=FALSE}
+min(ebola$age) 
+max(ebola$age) 
+ebola$age_group<-cut(ebola$age, 
+                breaks = c(0,14,24,34,44,100), 
+                labels = c("0-14","15-24","25-34","35-44","45+"), 
+                right = TRUE) 
+```
+
+The minimum age was **`r min(ebola$age) `** and maximum age was **`r  max(ebola$age) `**
+
+ 
+**structure check---**
+
+```{r echo=FALSE}
+str(ebola) 
+ebola<-as.data.frame(summary(ebola))
+reactable::reactable(ebola)
+```
+ 
+ 
+**ANALYSIS OF FACTORS ASSOCIATED WITH CONFIRMED EBOLA---- **
+
+**Descriptive analysis**
+
+```{r echo=FALSE}
+
+cleaned_ebola <- read_csv(here("data/cleaned_ebola_data.csv"))
+ 
+str(cleaned_ebola) 
+summary<-as.data.frame(summary(cleaned_ebola))
+reactable::reactable(summary) 
+```
+
+**Total number of cases after cleaning--**
+
+```{r echo=FALSE}
+number_of_cases<-nrow(cleaned_ebola) 
+number_of_cases
+```
+ 
+**frquency destribution of status---**
+
+```{r echo=FALSE}
+status_tab<-table(cleaned_ebola$status)
+status_tab
+```
+
+**percentage of status--**
+
+```{r echo=FALSE}
+percentage_status<-prop.table(status_tab)*100
+
+percentage_status<-as.data.frame(percentage_status)
+reactable::reactable(percentage_status)
+
+```
+
+ 
+**frequency_destribution of sex---**
+
+```{r echo=FALSE}
+sex_tab<-table(cleaned_ebola$sex) 
+percentage_sex<-prop.table(sex_tab)*100 
+percentage_sex<-as.data.frame(percentage_sex) 
+reactable::reactable(percentage_sex)
+```
+ 
+**Cross_tabulation of Sex Vs Status---**
+
+```{r echo=FALSE}
+cross_tab_sex<-table(cleaned_ebola$sex,cleaned_ebola$status) 
+cross_tab_sex 
+percentage_cross_tabsex<-prop.table((cross_tab_sex),1)*100 
+percentage_cross_tabsex<-as.data.frame(percentage_cross_tabsex)
+reactable::reactable(percentage_cross_tabsex)
+```
+ 
+**Descriptive statistics for Age--**
+
+
+```{r echo=FALSE}
+cleaned_ebola |> 
+  summarise(
+    Mean=mean(age,na.rm=T) ,
+    SD=sd(age) ,
+    Meadian=median(age,na.rm=T), 
+   IQR=IQR(age,na.rm=T) 
+
+  )
+
+```
+
+**Age_group--**
+
+```{r echo=FALSE}
+age_group_tab<-table(cleaned_ebola$age_group) 
+percentage_age_group<-prop.table(age_group_tab)*100 
+ 
+age_group_tab 
+percentage_age_group 
+``` 
+ 
+**Age Group Vs status---**
+
+```{r echo=FALSE}
+crosstab_age<-table(cleaned_ebola$age_group, cleaned_ebola$status) 
+percentage_cross_age<-prop.table((crosstab_age),1)*100 
+crosstab_age 
+percentage_cross_age 
+```
+ 
+**District destribution--**
+
+```{r echo=FALSE}
+district_tab<-table(cleaned_ebola$district) 
+district_tab 
+ 
+sorting<-sort(district_tab,decreasing = TRUE) 
+sorting 
+percentage<-prop.table((district_tab))*100 
+```
+
+**District Vs Status---**
+
+```{r echo=FALSE}
+district_crosstab<-table(cleaned_ebola$district,cleaned_ebola$status)  
+  
+reactable::reactable(district_crosstab)
+```
+
+**Delay Days Summary---**
+
+```{r echo=FALSE}
+summary(cleaned_ebola$delay_days) 
+mean(cleaned_ebola$delay_days) 
+median(cleaned_ebola$delay_days) 
+```
+
+**Epidermiological Week**
+
+```{r echo=FALSE}
+cleaned_ebola$epi_week<- isoweek(cleaned_ebola$date_of_onset) 
+
+
+weekly_cases<-cleaned_ebola %>%  
+group_by(epi_week) %>%  
+summarise(cases=n()) 
+reactable::reactable(weekly_cases)
+```
+ 
+**Epidemic curve--**
+
+```{r echo=FALSE, message=FALSE}
+p<-ggplot(weekly_cases, 
+       aes(x=epi_week,y=cases))+ 
+  geom_col()+ 
+  labs(title = "Epidemic Curve of Cases", 
+       x="Epidemiological Week", 
+       y="Number of cases") 
+p 
+
+```
+
+**Epidemic curve by status--**
+
+```{r echo=FALSE, message=FALSE}
+weekly_status<-cleaned_ebola %>%  
+  group_by(epi_week,status) %>%  
+  summarise(cases = n()) 
+weekly_status_plot<-ggplot(weekly_status, 
+       aes(x=epi_week, 
+           y=cases, 
+           fill = status))+ 
+  geom_col(position = "stack")+ 
+  labs(title = "Weekly Ebola Cases by Status", 
+       x="Epidemiological Week", 
+       y="Number of cases") 
+weekly_status_plot 
+``` 
+ 
+**Bar-chart of sex Distribution---**
+
+```{r echo=FALSE}
+sex_barchart<-ggplot(cleaned_ebola, 
+       aes(x=sex,))+ 
+  geom_bar()+ 
+  labs(title = "Distribution of cases by Sex", 
+       x="Sex", 
+       y="Frequecy") 
+sex_barchart 
+```
+
+
+**Bar_chart of Age distribution**
+
+```{r echo=FALSE}
+Age_group_barchart<-ggplot(cleaned_ebola, 
+                     aes(x=age_group))+ 
+  geom_bar()+ 
+  labs(title = "Distribution of Cases by Age Group", 
+       x="Age Group", 
+       y="Frequency") 
+Age_group_barchart 
+```
+ 
+**Boxplot of Age by status**
+
+```{r echo=FALSE}
+boxplot_age_Vs_status<-ggplot(cleaned_ebola, 
+       aes(x=status, 
+           y=age))+ 
+  geom_boxplot()+ 
+  labs(title = "Age Distribution by Ebola Status", 
+       x="Status", 
+       y="Age") 
+boxplot_age_Vs_status 
+ 
+```
+
+**Frequency Tables with percentages Together--**
+
+```{r echo=FALSE}
+sex_table<-cleaned_ebola %>%  
+  count(sex) %>%  
+  mutate(percent=round(n/sum(n)*100, 1)) 
+reactable::reactable(sex_table) 
+```
+
+**Status Proportion by District---**
+
+```{r echo=FALSE, message=FALSE}
+district_status<-cleaned_ebola %>%  
+  group_by(district,status) %>%  
+  summarise(n=n()) %>%  
+  mutate(percent=round(n/sum(n)*100, 1)) 
+reactable::reactable(district_status)
+```
+
+ 
+**Chi-Square Analysis---- **
+
+**chi-square test: Sex Vs Status**
+
+```{r echo=FALSE, message=FALSE}
+sex_status<-table(cleaned_ebola$sex,cleaned_ebola$status) 
+reactable::reactable(sex_status)
+
+chisq.test(sex_status) 
+ 
+reactable::reactable(prop.table(sex_status,1)*100)
+```
+
+**chi-square test:Age_group Vs status**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+age_status<-table(cleaned_ebola$age_group,cleaned_ebola$status) 
+reactable::reactable(age_status)
+
+chisq.test(age_status) 
+fisher.test(age_status) 
+
+
+reactable::reactable(prop.table(age_status,1)*100)
+```
+
+
+**chi-square test:Districts Vs Status**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+cleaned_ebola$district_group<-ifelse( 
+cleaned_ebola$district %in% c("western urban","bo","kono","port loko","kambia"), 
+"other District", 
+as.character(cleaned_ebola$district) 
+) 
+cleaned_ebola$district_group<-factor(cleaned_ebola$district_group) 
+district_status<-table(cleaned_ebola$district_group,cleaned_ebola$status) 
+reactable::reactable(district_status)
+
+chisq.test(district_status)
+reactable::reactable(chisq.test(district_status)$expected)
+
+
+fisher.test(district_status)
+```
+
+**Chi-Square Test workflow**
+
+**Sex**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+chisq.test(table(cleaned_ebola$sex,cleaned_ebola$status))
+```
+
+**Age_group**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+chisq.test(table(cleaned_ebola$age_group,cleaned_ebola$status)) 
+fisher.test(table(cleaned_ebola$age_group,cleaned_ebola$status))
+```
+
+**District**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+chisq.test(table(cleaned_ebola$district,cleaned_ebola$status)) 
+fisher.test(table(cleaned_ebola$district,cleaned_ebola$status)) 
+```
+
+**summary of sex table**
+
+```{r echo=FALSE, message=FALSE}
+sex_summary<-cleaned_ebola %>%  
+group_by(sex,status) %>%  
+summarise(n=n()) %>%  
+mutate(percent=round(n/sum(n)*100, 1)) 
+reactable::reactable(sex_summary)
+ 
+```
+
+**Visualization of association----**
+
+**stacked bar-chart**
+
+*sex Vs status* 
+
+```{r echo=FALSE, message=FALSE}
+visual_sexVs_status<-ggplot(cleaned_ebola, 
+       aes(x=sex, 
+           fill = status))+ 
+  geom_bar(position = "fill")+ 
+  labs(title = "Sex and Ebola Status", 
+       x="Sex", 
+       y="Proportion") 
+visual_sexVs_status 
+```
+ 
+**Age group Vs status** 
+
+```{r echo=FALSE, message=FALSE}
+agegroupVs_status<-ggplot(cleaned_ebola, 
+       aes(x=age_group, 
+           fill = status))+ 
+  geom_bar(position = "fill")+ 
+  labs(title = "Age Group and Ebola Status", 
+       x="Age Group", 
+       y="Proportion") 
+agegroupVs_status 
+ 
+```
+
+**Binary Logistic Regression---- **
+
+```{r echo=FALSE, message=FALSE}
+str(cleaned_ebola$status) 
+cleaned_ebola$status<-factor(cleaned_ebola$status, 
+levels = c("suspected","confirmed") 
+) 
+levels(cleaned_ebola$status) 
+str(cleaned_ebola$status)
+```
+
+**Reference category checking**
+
+```{r echo=FALSE, message=FALSE}
+cleaned_ebola$sex<-factor(cleaned_ebola$sex) 
+levels(cleaned_ebola$sex) 
+cleaned_ebola$age_group<-factor(cleaned_ebola$age_group) 
+levels(cleaned_ebola$age_group) 
+cleaned_ebola$district<-factor(cleaned_ebola$district_group) 
+levels(cleaned_ebola$district_group)
+```
+
+**Setting of reference category**
+
+```{r echo=FALSE, message=FALSE}
+cleaned_ebola$sex<-relevel(cleaned_ebola$sex,ref = "female") 
+cleaned_ebola$age_group<-relevel(cleaned_ebola$age_group,ref = "0-14") 
+cleaned_ebola$district<-relevel(cleaned_ebola$district,ref = "kailahun")
+
+```
+
+**Crude Logistic Regression---**
+
+**sex only**
+
+```{r echo=FALSE, message=FALSE}
+model_sex<-glm( 
+status~sex, 
+data = cleaned_ebola, 
+family = binomial 
+) 
+summary(model_sex)
+
+exp(coef(model_sex))
+
+reactable::reactable(exp(confint(model_sex))) 
+```
+
+**logistic regression for Age Group**
+
+```{r echo=FALSE, message=FALSE}
+model_age<-glm( 
+status~age_group, 
+data=cleaned_ebola, 
+family = binomial 
+) 
+summary(model_age)
+
+exp(coef(model_age)) 
+ 
+reactable::reactable(exp(confint(model_age)))
+```
+
+**logistic for District**
+
+```{r echo=FALSE, message=FALSE}
+model_district<-glm( 
+status~district, 
+data=cleaned_ebola, 
+family = binomial 
+) 
+summary(model_district) 
+
+exp(coef(model_district)) 
+
+reactable::reactable(exp(confint(model_district)))
+```
+
+**FUll Multivariable Logistic Regression----**
+
+```{r echo=FALSE, message=FALSE}
+full_model<-glm( 
+status~age_group + sex + district, 
+data = cleaned_ebola, 
+family = binomial 
+) 
+summary(full_model)
+```
+
+**Adjusted Odds ratio(AOR)--**
+
+```{r echo=FALSE, message=FALSE}
+exp(coef(full_model)) 
+
+reactable::reactable(exp(confint(full_model))) #95% confidence Interval 
+ 
+
+results<-tidy(full_model, 
+exponentiate = TRUE, 
+conf.int = TRUE) 
+reactable::reactable(results) 
+```
+
+
+**Model Fit Assessment----**
+
+```{r echo=FALSE, message=FALSE}
+
+pR2(full_model)
+```
+
+**Hosmer_lemeshow Goodness of fit---- **
+
+```{r echo=FALSE, message=FALSE}
+hoslem.test( 
+as.numeric(cleaned_ebola$status) - 1, 
+fitted(full_model) 
+) 
+```
+
+**Predict Probability---- **
+
+```{r echo=FALSE, message=TRUE}
+cleaned_ebola$predicted_prob<-predict(full_model, 
+type = "response") 
+reactable::reactable(as.data.frame(cleaned_ebola$predicted_prob)) 
+head(cleaned_ebola$predicted_prob)
+
+```
+
+
+
+
+
+
+
